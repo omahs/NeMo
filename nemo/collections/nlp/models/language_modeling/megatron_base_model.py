@@ -475,10 +475,10 @@ class MegatronBaseModel(NLPModel):
 
         # Wrap the baseline optimizer with the optimizer class with master parameters
         if self.megatron_amp_o2 and not self.with_distributed_adam and self._optimizer is not None:
-            if self.cfg.precision == 'bf16':
+            if self.cfg.precision in ['bf16', 'bf16-mixed']:
                 fp32_grad_accum = True
                 contiguous_grad_bucket = True
-            elif self.cfg.precision == 16:
+            elif self.cfg.precision == [16, '16', '16-mixed']:
                 fp32_grad_accum = False
                 # TODO: contiguous grad bucket for fp16 is also planned to be supported
                 contiguous_grad_bucket = False
@@ -768,16 +768,14 @@ class MegatronBaseModel(NLPModel):
         config_mapping = {
             "perform_initialization": True,  # initailize weights when constructing the module
             "fp16": False,  # NeMo does not currently support fp16 training with megatron amp O2
-            "bf16": precision == 'bf16' and megatron_amp_O2,
+            "bf16": precision in ['bf16', 'bf16-mixed'] and megatron_amp_O2,
             "params_dtype": params_dtype,
             "timers": None,  # NeMo does not currently support megatron core timers
             "async_tensor_model_parallel_allreduce": self.cfg.get('tensor_model_parallel_world_size', 1) > 1
             and not self.cfg.get('sequence_parallel', False),
             "pipeline_dtype": pipeline_dtype,
-            "grad_scale_func": self.trainer.precision_plugin.scaler.scale
-            if precision in [16, '16', '16-mixed']
-            else None,
-            "enable_autocast": not megatron_amp_O2 and precision in [16, '16', 'bf16'],
+            "grad_scale_func": self.trainer.precision_plugin.scaler.scale if pipeline_dtype == torch.float16 else None,
+            "enable_autocast": not megatron_amp_O2 and pipeline_dtype in [torch.bfloat16, torch.float16],
             "autocast_dtype": autocast_dtype,
             "variable_seq_lengths": False,  # set dynamically during training
             "num_microbatches_with_partial_activation_checkpoints": self.cfg.get(
